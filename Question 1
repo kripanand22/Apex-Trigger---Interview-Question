@@ -1,0 +1,57 @@
+Write a trigger to count all contacts related to the same record type and update the Account as per the record type of contact.
+Example -> Contact Record Type - > Student, Teacher
+           Contact 1 -> Student
+           Contact 2 -> Teacher
+           Contact 3 -> Student
+           Contact 4 -> Student
+There are two fields on Account Total number of Students and Total number of Teachers. Need to update both fields as per the record of contact related to the Account.
+
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+Account Trigger
+
+trigger ContactTrigger on Contact (After insert,After Update,After Delete) {
+    if(trigger.isInsert && trigger.isAfter){
+        ContactTriggerHandler.updateAccountField(trigger.New);
+    }
+     if(trigger.isUpdate && trigger.isAfter){
+        ContactTriggerHandler.updateAccountField(trigger.New);
+    }
+     if(trigger.isDelete && trigger.isAfter){
+        ContactTriggerHandler.updateAccountField(trigger.Old);
+    }
+}
+
+Account Trigger Handler
+
+public class ContactTriggerHandler {
+    public static void updateAccountField(List<Contact> newList){
+        Id studentRecordTypeId = Schema.SObjectType.Contact.getRecordTypeInfosByDeveloperName().get('Student').getRecordTypeId();
+        Id teacherRecordTypeId = Schema.SObjectType.Contact.getRecordTypeInfosByDeveloperName().get('Teacher').getRecordTypeId();
+        Set<Id> accountIds = new Set<Id>();
+        for(Contact con:newList){
+            accountIds.add(con.AccountId);
+        }
+        
+        Map<String,Integer> recIdVSTotalContact = new Map<String,Integer>();
+        Map<ID,ID> accIdVsRecTypeId = new Map<Id,ID>();
+        for(Contact con:[Select Name,Id,RecordTypeId,AccountID from Contact where RecordTypeId!=null AND AccountID IN:accountIds]){
+            if(!recIdVSTotalContact.containsKey(con.AccountId+'/'+con.RecordTypeId)){
+                recIdVSTotalContact.put(con.AccountId+'/'+con.RecordTypeId,1);
+                accIdVsRecTypeId.put(con.AccountId,con.RecordTypeId);
+            }else{
+                Integer count = recIdVSTotalContact.get(con.AccountId+'/'+con.RecordTypeId)+1;
+                recIdVSTotalContact.put(con.AccountId+'/'+con.RecordTypeId,count);
+            }
+        }
+        List<Account> updateAccount = new List<Account>();
+        for(Id accIds:accIdVsRecTypeId.keySet()){
+            Account acc = new Account();
+            acc.Id = accIds;
+            acc.Total_Number_Of_Student__c = recIdVSTotalContact.get(accIds+'/'+studentRecordTypeId);
+            acc.Total_number_Of_Teacher__c = recIdVSTotalContact.get(accIds+'/'+teacherRecordTypeId);
+            updateAccount.add(acc);
+        }
+        if(updateAccount.size() > 0)
+            Update updateAccount;
+    }
+}
